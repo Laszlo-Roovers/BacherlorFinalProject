@@ -161,13 +161,3 @@ cython_debug/
 
 # Data folder since it exceeds the file size limit
 data/
-
-data/models/base_CNN.json
-data/models/base_CNN.tar
-data/models/good_run.tar
-data/raw/flow_2_years.hdf5
-data/raw/vorticity_visual.gif
-data/sets/base/psitest.npy
-data/sets/base/psitrain.npy
-data/sets/base/wtest.npy
-data/sets/base/wtrain.npy
