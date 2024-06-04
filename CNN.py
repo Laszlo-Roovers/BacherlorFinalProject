@@ -4,11 +4,12 @@ import torch.nn as nn
 class CNN(nn.Module):
 
     def __init__(self, channels):
-        """
-        Initialize components used to build the CNN model.
+        """Initialize components used to build the CNN model.
 
-        Parameters:
-            channels: Defines number of channels used in a layer of the CNN. Don't add input or output in parameter.
+        Parameters
+        ----------
+        channels : int
+            Defines number of channels used in a layer of the CNN. Don't add input or output in parameter.
         """
         super().__init__()
 
@@ -45,6 +46,17 @@ class CNN(nn.Module):
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x):
+        """Calculate a forward pass.
+    
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor
+
+        Returns
+        -------
+        torch.Tensor
+        """
         for layer in self.layers:
             x = layer(x)
         return x

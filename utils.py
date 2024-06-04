@@ -10,7 +10,8 @@ def prepare_data(DATABASE_PATH, name, split_ratio):
     Takes a database in HDF5 format and turns in into a normalized train & test set.
     The result is stored locally in ./data/sets/.
 
-    Parameters:
+    Parameters
+    ----------
         DATABASE_PATH: Path of the HDF5 database file.
         name: Reference name with which the resulting datasets should be stored.
         split_ratio: Determines the train-test split.
@@ -47,22 +48,31 @@ def prepare_data(DATABASE_PATH, name, split_ratio):
 
 
 def normalize_fields(w_train, w_test, psi_train, psi_test):
-    """
-    Normalize all the fields in the arrays of field snapshots using training set.
+    """Normalize all the fields in the arrays of field snapshots using training set.
     Only summary statistics of the training set are used because the test set should be
     considered as an unknown, that the model does not have access to during training.
 
-    Parameters:
-        w_train: Train set of unnormalized vorticity.
-        w_test: Test set of unnormalized vorticity.
-        psi_train: Train set of unnormalized stream function.
-        psi_test: Test set of unnormalized stream function.
+    Parameters
+    ----------
+    w_train : torch.Tensor
+        Train set of unnormalized vorticity.
+    w_test : torch.Tensor
+        Test set of unnormalized vorticity.
+    psi_train : torch.Tensor
+        Train set of unnormalized stream function.
+    psi_test : torch.Tensor
+        Test set of unnormalized stream function.
 
-    Returns:
-        w_train: Train set of normalized vorticity.
-        w_test: Test set of normalized vorticity.
-        psi_train: Train set of normalized stream function.
-        psi_test: Test set of normalized stream function.
+    Returns
+    -------
+    w_train :torch.Tensor
+        Train set of normalized vorticity.
+    w_test : torch.Tensor
+        Test set of normalized vorticity.
+    psi_train : torch.Tensor
+        Train set of normalized stream function.
+    psi_test : torch.Tensor
+        Test set of normalized stream function.
     """
     # Compute relevant statistics of the training data set
     w_train_mean, w_train_std = np.mean(w_train), np.std(w_train)
@@ -83,10 +93,13 @@ def get_psi_from_w(w):
     """
     Compute the stream function from the vorticity.
 
-    Parameters:
-        w: Vorticity field.
+    Parameters
+    ----------
+    w : torch.Tensor
+        Vorticity field.
 
-    Returns:
+    Returns
+    -------
         psi: Stream function.
     """
     # Grid size
@@ -115,7 +128,8 @@ def save_model(model, model_path, name):
     """
     Take a model and save its state dictionary to the designated data folder.
 
-    Parameters:
+    Parameters
+    ----------
         model: A PyTorch model.
         model_path: Folder where model state dicts get stored.
         name: Identifier of the model
@@ -135,7 +149,8 @@ def set_seed(seed):
     """
     Set the seed of all libraries that incoporate (pseudo-) randomness at once so that the same research results can be reproduced.
 
-    Parameters:
+    Parameters
+    ----------
         seed: integer value passed on the individual seed setter functions.
     """
     random.seed(seed)
