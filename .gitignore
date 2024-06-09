@@ -161,3 +161,5 @@ cython_debug/
 
 # Data folder since it exceeds the file size limit
 data/
+
+test.py

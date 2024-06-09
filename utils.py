@@ -6,15 +6,17 @@ import random
 
 
 def prepare_data(DATABASE_PATH, name, split_ratio):
-    """
-    Takes a database in HDF5 format and turns in into a normalized train & test set.
+    """Takes a database in HDF5 format and turns in into a normalized train & test set.
     The result is stored locally in ./data/sets/.
 
     Parameters
     ----------
-        DATABASE_PATH: Path of the HDF5 database file.
-        name: Reference name with which the resulting datasets should be stored.
-        split_ratio: Determines the train-test split.
+    DATABASE_PATH : str
+        Path of the HDF5 database file.
+    name : str
+        Reference name with which the resulting datasets should be stored.
+    split_ratio : float
+        Determines the train-test split.
     """
 
     # Read HDF5 database into NumPy arrays
@@ -23,6 +25,10 @@ def prepare_data(DATABASE_PATH, name, split_ratio):
         psi_hat = f["psi_hat_n_HF"]
         w = np.fft.ifft2(w_hat).real
         psi = np.fft.ifft2(psi_hat).real
+
+    # Resize to 256x256 for compatibility
+    w = w[:, :-1, :-1]
+    psi = psi[:, :-1, :-1]
 
     # Split the array of field snapshots up into a training set and a test set
     split_index = round(split_ratio * len(w))
@@ -103,7 +109,7 @@ def get_psi_from_w(w):
         psi: Stream function.
     """
     # Grid size
-    N_HF = 257
+    N_HF = 256
 
     # Conversion from spatial domain to frequency domain
     w_hat = torch.fft.fft2(w)
