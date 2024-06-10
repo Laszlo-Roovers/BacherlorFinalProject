@@ -3,15 +3,18 @@ import torch.nn as nn
 
 class CNN(nn.Module):
 
-    def __init__(self, channels):
+    def __init__(self, name, channels):
         """Initialize components used to build the CNN model.
 
         Parameters
         ----------
+        name : str
+            Name used for storing results.
         channels : int
             Defines number of channels used in a layer of the CNN. Don't add input or output in parameter.
         """
         super().__init__()
+        self.name = name
 
         # Construct the CNN using the given layout
         layers = []
