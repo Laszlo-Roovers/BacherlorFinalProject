@@ -9,40 +9,40 @@ class UNet(nn.Module):
         # ------------------------- Contractive path -----------------------------------
 
         # Input Dimension: 256x256x2
-        self.enc11 = nn.Conv2d(2, 64, kernel_size=5, padding=2, padding_mode="circular")
-        self.enc12 = nn.Conv2d(64, 64, kernel_size=5, padding=2, padding_mode="circular")
+        self.enc11 = nn.Conv2d(2, 16, kernel_size=5, padding=2, padding_mode="circular")
+        self.enc12 = nn.Conv2d(16, 16, kernel_size=5, padding=2, padding_mode="circular")
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2) 
 
         # Input Dimension: 128x128x64
-        self.enc21 = nn.Conv2d(64, 128, kernel_size=5, padding=2, padding_mode="circular")
-        self.enc22 = nn.Conv2d(128, 128, kernel_size=5, padding=2, padding_mode="circular")
+        self.enc21 = nn.Conv2d(16, 32, kernel_size=5, padding=2, padding_mode="circular")
+        self.enc22 = nn.Conv2d(32, 32, kernel_size=5, padding=2, padding_mode="circular")
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         # Input Dimension: 64x64x128
-        self.enc31 = nn.Conv2d(128, 256, kernel_size=5, padding=2, padding_mode="circular")
-        self.enc32 = nn.Conv2d(256, 256, kernel_size=5, padding=2, padding_mode="circular")
+        self.enc31 = nn.Conv2d(32, 64, kernel_size=5, padding=2, padding_mode="circular")
+        self.enc32 = nn.Conv2d(64, 64, kernel_size=5, padding=2, padding_mode="circular")
         self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         # Input Dimension: 32x32x256
-        self.enc41 = nn.Conv2d(256, 512, kernel_size=5, padding=2, padding_mode="circular")
-        self.enc42 = nn.Conv2d(512, 512, kernel_size=5, padding=2, padding_mode="circular")
+        self.enc41 = nn.Conv2d(64, 128, kernel_size=5, padding=2, padding_mode="circular")
+        self.enc42 = nn.Conv2d(128, 128, kernel_size=5, padding=2, padding_mode="circular")
 
         # ------------------------- Expansive path -----------------------------------
 
-        self.dec11 = nn.Conv2d(512, 256, kernel_size=5, padding=2, padding_mode="circular")
-        self.dec12 = nn.Conv2d(256, 256, kernel_size=5, padding=2, padding_mode="circular")
-        self.upconv1 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
+        self.dec11 = nn.Conv2d(128, 64, kernel_size=5, padding=2, padding_mode="circular")
+        self.dec12 = nn.Conv2d(64, 64, kernel_size=5, padding=2, padding_mode="circular")
+        self.upconv1 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
 
-        self.dec21 = nn.Conv2d(256, 128, kernel_size=5, padding=2, padding_mode="circular")
-        self.dec22 = nn.Conv2d(128, 128, kernel_size=5, padding=2, padding_mode="circular")
-        self.upconv2 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
+        self.dec21 = nn.Conv2d(64, 32, kernel_size=5, padding=2, padding_mode="circular")
+        self.dec22 = nn.Conv2d(32, 32, kernel_size=5, padding=2, padding_mode="circular")
+        self.upconv2 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
 
-        self.dec31 = nn.Conv2d(128, 64, kernel_size=5, padding=2, padding_mode="circular")
-        self.dec32 = nn.Conv2d(64, 64, kernel_size=5, padding=2, padding_mode="circular")
-        self.upconv3 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+        self.dec31 = nn.Conv2d(32, 16, kernel_size=5, padding=2, padding_mode="circular")
+        self.dec32 = nn.Conv2d(16, 16, kernel_size=5, padding=2, padding_mode="circular")
+        self.upconv3 = nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2)
 
         # ------------------------- Output layer -----------------------------------
-        self.outconv = nn.Conv2d(64, 1, kernel_size=5, padding=2, padding_mode="circular")
+        self.outconv = nn.Conv2d(16, 1, kernel_size=5, padding=2, padding_mode="circular")
 
     def forward(self, x):
         """Calculate a forward pass.
