@@ -3,15 +3,15 @@ import torch.nn as nn
 
 class CNN(nn.Module):
 
-    def __init__(self, name, channels):
+    def __init__(self, name, kernel):
         """Initialize components used to build the CNN model.
 
         Parameters
         ----------
         name : str
             Name used for storing results.
-        channels : int
-            Defines number of channels used in a layer of the CNN. Don't add input or output in parameter.
+        kernel : int
+            Makes the convolutional kernel be of size `kernel x kernel`.
         """
         super().__init__()
         self.name = name
@@ -20,7 +20,7 @@ class CNN(nn.Module):
         layers = []
 
         # Initially we only have the w and psi channel, at the end we output only w.
-        channels = [2] + channels + [1]
+        channels = [2, 16, 16, 32, 32, 64, 64, 1]
 
         # Iteratively add layers
         for layer_index in range(len(channels) - 2):
@@ -28,7 +28,7 @@ class CNN(nn.Module):
                 nn.Conv2d(
                     in_channels=channels[layer_index],
                     out_channels=channels[layer_index + 1],
-                    kernel_size=5,
+                    kernel_size=kernel,
                     padding=2,
                     padding_mode="circular",
                 ),
@@ -41,7 +41,7 @@ class CNN(nn.Module):
             nn.Conv2d(
                 in_channels=channels[-2],
                 out_channels=channels[-1],
-                kernel_size=5,
+                kernel_size=kernel,
                 padding=2,
                 padding_mode="circular",
             )
