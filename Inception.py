@@ -18,11 +18,11 @@ class ConvolutionBlock(nn.Module):
     padding : int
         Number of pixels added around the border.
     """
-    def __init__(self, in_channels, out_channels, kernel_size, padding):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
         super(ConvolutionBlock, self).__init__()
 
         # Components needed in a convolution layer
-        self.conv2d = nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding, stride=1, padding_mode='circular')
+        self.conv2d = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, padding_mode='circular')
         self.batchnorm2d = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
@@ -31,7 +31,7 @@ class ConvolutionBlock(nn.Module):
 
 def testConvBlock():
     x = torch.randn(16, 2, 256, 256)
-    model = ConvolutionBlock(2, 8, 5, 2)
+    model = ConvolutionBlock(2, 8, 5, 1, 2)
     print(model(x).shape)
     del model
 
@@ -66,24 +66,24 @@ class InceptionModule(nn.Module):
         super(InceptionModule, self).__init__()
 
         # Branch A - conv(kernel 1, padding 0)
-        self.branch_a = ConvolutionBlock(in_channels, out_1x1, 1, 0)
+        self.branch_a = ConvolutionBlock(in_channels, out_1x1, 1, 1, 0)
 
         # Branch B - conv(kernel 1, padding 0) -> conv(kernel 3, padding 1)
         self.branch_b = nn.Sequential(
-            ConvolutionBlock(in_channels, red_3x3, 1, 0),
-            ConvolutionBlock(red_3x3, out_3x3, 3, 1)
+            ConvolutionBlock(in_channels, red_3x3, 1, 1, 0),
+            ConvolutionBlock(red_3x3, out_3x3, 3, 1, 1)
         )
 
         # Branch C - conv(kernel 1, padding 0) -> conv(kernel 5, padding 2)
         self.branch_c = nn.Sequential(
-            ConvolutionBlock(in_channels, red_5x5, 1, 0),
-            ConvolutionBlock(red_5x5, out_5x5, 5, 2)
+            ConvolutionBlock(in_channels, red_5x5, 1, 1, 0),
+            ConvolutionBlock(red_5x5, out_5x5, 5, 1, 2)
         )
 
         # Branch D - pool(kernel 3, padding 1) -> conv(kernel 1, padding 0)
         self.branch_d = nn.Sequential(
             nn.MaxPool2d(3, 1, 1),
-            ConvolutionBlock(in_channels, out_1x1_pool, 1, 0)
+            ConvolutionBlock(in_channels, out_1x1_pool, 1, 1, 0)
         )
 
     def forward(self, x):
@@ -113,5 +113,5 @@ def testInceptionBlock():
 model = testInceptionBlock()
 
 architecture = 'InceptionBlock'
-model_graph = draw_graph(model, input_size=(1, 8, 256, 256), graph_dir='TB', roll=True, graph_name=f'self_{architecture}', save_graph=True, filename=f"self_{architecture}", expand_nested=True)
+model_graph = draw_graph(model, input_size=(1, 8, 256, 256), graph_dir='LR', roll=True, graph_name=f'self_{architecture}', save_graph=True, filename=f"self_{architecture}", expand_nested=True)
 

@@ -119,3 +119,24 @@ class UNet(nn.Module):
         out = self.outconv(x_dec32)
 
         return out
+
+from torchview import draw_graph
+
+
+model = UNet('test', 5)
+# print(model(x).shape)
+# return model
+# model = testInceptionv1()
+
+
+architecture = "unet"
+model_graph = draw_graph(
+    model,
+    input_size=(16, 2, 256, 256),
+    graph_dir="TB",
+    roll=True,
+    expand_nested=True,
+    graph_name=f"self_{architecture}",
+    save_graph=True,
+    filename=f"self_{architecture}",
+)

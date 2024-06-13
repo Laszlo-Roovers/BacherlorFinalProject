@@ -1,394 +1,118 @@
-# Based on the code of the original vision transformer paper
-
 import torch
 import torch.nn as nn
 
-class PatchEmbed(nn.Module):
-    """Split image into patches and then embed them.
+class PatchEmbedding(nn.Module):
+    """Create patch embeddings from a field of flow data.
 
     Parameters
     ----------
     img_size : int
-        Size of the image (square)
-
+        Size of the input field.
     patch_size : int
-        Size of the patch (square)
-
-    in_chans : int
-        Number of input channels
-
-    embed_dim : int
-        The embedding dimension
-
-    Attributes
-    ----------
-    n_patches : int
-        Number of patches inside our image
-
-    proj : nn.Conv2D
-        Convolutional layer that does both the splitting into patches and their embedding
-    """
-    def __init__(self, img_size, patch_size, in_chans=2, embed_dim=768):
-        super().__init__()
-        self.img_size = img_size
-        self.patch_size = patch_size
-        self.n_patches = (img_size // patch_size) ** 2
-
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, x):
-        """Run forward pass.
-
-        Parameters
-        ----------
-        x: torch.Tensor
-            Shape `(n_samples, in_chans, img_size, img_size)`.
-
-        Returns
-        -------
-        torch.Tensor - Shape `(n_samples, n_patches, embed_dim)`.
-        """
-        x = self.proj(x) # (n_samples, embed_dim, n_patches ** 0.5, n_patches ** 0.5)
-        x = x.flatten(2) # (n_samples, embed_dim, n_patches)
-        x = x.transpose(1, 2) # (n_samples, n_patches, embed_dim)
-
-        return x
-
-class Attention(nn.Module):
-    """Attention mechanism.
-
-    Parameters
-    ----------
-    dim: int
-        The input and output dimension of per token features.
-
-    n_heads: int
-        Number of attention heads
-
-    qkv_bias: bool
-        If True then we include bias to the query, key and value projections
-
-    attn_p: float
-        Dropout probability applied to the query, key and value tensors
-
-    proj_p: float
-        Dropout probability applied to the output tensor
-
-    Attributes
-    ----------
-    scale : float
-        Normalizing constant for the dot product
-
-    qkv : nn.Linear
-        Linear projection for the query, key and value
-    
-    proj : nn.Linear
-        Linear mapping that takes in the concatenated output of all attention heads and maps it into a new space
-
-    attn_drop, proj_drop : nn.Dropout
-        Dropout layers 
-    """
-    def __init__(self, dim, n_heads=12, qkv_bias=True, attn_p=0., proj_p=0.):
-        super().__init__()
-        self.n_heads = n_heads
-        self.dim = dim
-        self.head_dim = dim // n_heads
-        self.scale = self.head_dim ** -0.5
-
-        self.qkv = nn.Linear(dim, dim*3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_p)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_p)
-
-    def forward(self, x):
-        """Run forward pass.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Shape `(n_samples, n_patches + 1, dim)`
-        
-        Returns
-        -------
-        torch.Tensor
-            Shape `(n_samples, n_patches + 1, dim)`
-        """
-
-        n_samples, n_tokens, dim = x.shape
-        if dim != self.dim:
-            raise ValueError
-
-        qkv = self.qkv(x) # (n_samples, n_patches + 1, 3 * dim)
-        qkv = qkv.reshape(n_samples, n_tokens, 3, self.n_heads, self.head_dim) # (n_samples, n_patches + 1, 3, n_heads, head_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4) # (3, n_samples, n_heads, n_patches + 1, head_dim)
-
-        q, k, v = qkv[0], qkv[1], qkv[3]
-
-        k_t = k.transpose(-2, -1) # (n_samples, n_heads, head_dim, n_patches + 1)
-        dp = (
-            q @ k_t
-        ) * self.scale # (n_samples, n_heads, n_patches + 1, n_patches + 1)
-        attn = dp.softmax(dim=-1) # (n_samples, n_heads, n_patches + 1, n_patches + 1)
-        attn = self.attn_drop(attn)
-
-        weighted_avg = attn @ v # (n_samples, n_heads, n_patches + 1, head_dim)
-        weighted_avg = weighted_avg.transpose(1, 2) # (n_samples, n_patches + 1, n_heads, head_dim)
-        weighted_avg = weighted_avg.flatten(2) # (n_samples, n_patches + 1, dim)
-
-        x = self.proj(weighted_avg)  # (n_samples, n_patches + 1, dim)
-        x = self.proj_drop(x)
-
-        return x
-
-class MLP(nn.Module):
-    """Multilayer perceptron.
-
-    Parameters
-    ----------
-    in_features : int
-        Number of input features.
-
-    hidden_features : int
-        Number of nodes in the hidden layer.
-
-    out_features : int
-        Number of output features.
-    
-    p : float
-        Dropout probability.
-
-    Attributes
-    ----------
-    fc : nn.Linear
-        The first linear layer.
-    
-    act : nn.GELU
-        GELU activation function.
-
-    fc2 : nn.Linear
-        The second linear layer.
-    
-    drop : nn.Dropout
-        Dropout layer.
-    """
-    def __init__(self, in_features, hidden_features, out_features, p=0.):
-        super().__init__()
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = nn.GELU()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(p)
-
-    def forward(self, x):
-        """Run a forward pass.
-        
-        Parameters
-        ----------
-        x : torch.Tensor
-            Shape `(n_samples, n_patches + 1, in_features)`.
-        
-        Returns
-        -------
-            Shape `(n_samples, n_patches + 1, out_features)`.
-        """
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-
-        return x
-
-class Block(nn.Module):
-    """Transformer block.
-
-    Parameters
-    ----------
+        Size of a single patch (should be a divisor of `img_size`).
     dim : int
-        Embedding dimension.
-    
-    n_heads : int
-        NUmber of attention heads.
-
-    mlp_ratio : float
-        Determines the hidden dimension size of the `MLP` module with respect to `dim`.
-
-    qkv_bias : bool
-        If True then we include bias to the query, key and value projections.
-
-    p, attn_p : float
-        Dropout probability.
-    
-    Attributes
-    ----------
-    norm1, norm2 : LayerNorm
-        Layer normalization.
-
-    attn: Attention
-        Attention module.
-    
-    mlp : MLP
-        MLP module.
+        Dimensionality of the patch embedding.
+    channels : int
+        Number of channels of the input tensor (2, psi and omega).
     """
-    def __init__(self, dim, n_heads, mlp_ratio=4.0, qkv_bias=True, p=0., attn_p=0.):
-        super().__init__()
-        self.norm1 = nn.LayerNorm(dim, eps=1e-6)
-        self.attn = Attention(
-            dim=dim,
-            n_heads=n_heads,
-            qkv_bias=qkv_bias,
-            attn_p=attn_p,
-            proj_p=p
-        )
-        self.norm2 = nn.LayerNorm(dim, eps=1e-6)
-        hidden_features = int(dim * mlp_ratio)
-        self.mlp = MLP(
-            in_features=dim,
-            hidden_features=hidden_features,
-            out_features=dim
-        )
-    
+    def __init__(self, img_size, patch_size, dim, channels=2):
+        super(PatchEmbedding, self).__init__()
+        self.patch_size = patch_size
+        self.dim = dim
+        self.num_patches = (img_size // patch_size)**2
+        self.patch_dim = channels * patch_size * patch_size
+
+        self.projection = nn.Linear(self.patch_dim, dim)
+        self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_patches, dim))
+
     def forward(self, x):
-        """Run forward pass.
+        """Calculate a forward pass.
 
         Parameters
         ----------
         x : torch.Tensor
-            Shape `(n_samples, )`
-        
+            Input tensor of shape `(Batch, Channel, Heigh, Width)`.
+
         Returns
         -------
         torch.Tensor
-            Shape `(n_samples, n_patches + 1, dim)`
+            Patch embeddings of shape `(B, num_patches, dim)`.
         """
-        x = x + self.attn(self.norm1(x))
-        x = x + self.mlp(self.norm2(x))
+        B, C, H, W = x.shape
+        patches = x.unfold(2, self.patch_size, self.patch_size).unfold(3, self.patch_size, self.patch_size)
+        patches = patches.contiguous().view(B, -1, self.patch_dim)
+        patches = self.projection(patches)
+        patches += self.position_embeddings
+        return patches
 
-        return x
-    
+
 class VisionTransformer(nn.Module):
-    """Simplified implementation of the vision transformer.
+    """Vision Transformer rebuilt to predict turbulent flow.
     
     Parameters
     ----------
     img_size : int
-        Both height and width of the image (square).
-
+        Size of the input field.
     patch_size : int
-        Both height and width of the patch (square).
-
-    in_chans : int
-        Number of input channels.
-
-    n_classes : int
-        Dimensionality of the token/patch embeddings.
-
+        Size of a single patch.
+    dim : int
+        Dimensionality of the patch embeddings.
     depth : int
-        Number of blocks.
-
-    n_heads : int
-        Number of attention heads.
-
-    mlp_ratio : float
-        Determines the hidden dimension of the `MLP` module.
-
-    qkv_bias : bool
-        If True then we include bias to the query, key and value projections.
-
-    p, attn_p : float
-        Dropout probability.
-
-    Attributes
-    ----------
-    patch_embed : PatchEmbed
-        Instance of `PatchEmbed` layer.
-
-    cls_token : nn.Parameter
-        Learnable parameter that will represent the first token in the sequence.
-        It has `embed_dim` elements.
-
-    pos_emb : nn.Parameter
-        Positional embedding of the cls token + all the patches.
-        It has `(n_patches + 1) * embed_dim` elements.
-    
-    pos_drop : nn.Dropout
-        Dropout layer.
-
-    blocks : nn.ModuleList
-        List of `Block` modules.
-
-    norm : nn.LayerNorm
-        Layer normalization.
+        Number of layers in the Transformer encoder.
+    heads : int
+        Number of attention heads in the encoder.
+    mlp_dim : int
+        Dimensionality of the feed-forward layers in the Transformer encoder.
+    channels : int
+        Number of channels in the input tensor (2, psi and omega).
     """
-    def __init__(
-            self,
-            img_size=257,
-            patch_size=16, # padding nodig?
-            in_chans=2,
-            n_classes=1000, # i.p.v. image-to-class nu image-to-image nodig
-            embed_dim=768,
-            depth=12,
-            n_heads=12,
-            mlp_ratio=4.,
-            qkv_bias=True,
-            p=0.,
-            attn_p=0.
-    ):
-        super().__init__()
+    def __init__(self, img_size, patch_size, dim, depth, heads, mlp_dim, channels=2):
+        super(VisionTransformer, self).__init__()
 
-        self.path_embed = PatchEmbed(
-            img_size=img_size,
-            patch_size=patch_size,
-            in_chans=in_chans,
-            embed_dim=embed_dim
+        # Patch embedding and transformer.
+        self.patch_embedding = PatchEmbedding(img_size, patch_size, dim, channels)
+        self.transformer = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(dim, heads, mlp_dim), depth
         )
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(torch.zeros(1, 1 + self.patch_embed.n_patches, embed_dim))
-        self.pos_drop = nn.Dropout(p=p)
+        self.patch_size = patch_size
+        self.dim = dim
 
-        self.blocks = nn.ModuleList(
-            [
-                Block(
-                    dim=embed_dim,
-                    n_heads=n_heads,
-                    mlp_ratio=mlp_ratio,
-                    qkv_bias=qkv_bias,
-                    p=p,
-                    attn_p=attn_p
-                )
-                for _ in range(depth)
-            ]
+        # Upsampling to get back to the original dimensions.
+        self.upsample = nn.Sequential(
+            nn.ConvTranspose2d(dim, dim, kernel_size=patch_size, stride=patch_size),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(dim, 1, kernel_size=1)
         )
-
-        self.norm = nn.LayerNorm(embed_dim, eps=1e-6)
-        self.head = nn.Linear(embed_dim, n_classes)
 
     def forward(self, x):
-        """Run the forward pass.
+        """Calculate a forward pass.
         
         Parameters
         ----------
         x : torch.Tensor
-            Shape `(n_samples, in_chans, img_size, img_size)`.
+            Input tensor of shape `(Batch, Channel, Heigh, Width)`.
         
         Returns
         -------
-        logits : torch.Tensor
-            Logits over all classes - `(n_samples, n_classes)`.
+        torch.Tensor
+            Output field prediction of shape `(Batch, dim, H / patch_size, W / patch_size)`.
         """
-        n_samples = x.shape[0]
-        x = self.patch_embed(x)
+        patches = self.patch_embedding(x)
+        B, N, D = patches.size()
+        x = self.transformer(patches)
 
-        cls_token = self.cls_token.expand(n_samples, -1, -1) # (n_samples, 1, embed_dim)
-        x = torch.cat((cls_token, x), dim=1) # (n_samples, n_patches + 1, embed_dim)
-        x = x + self.pos_embed # (n_samples, n_patches + 1, embed_dim)
-        x = self.pos_drop(x)
+        output_size = int(N**0.5)
+        compressed_fields = x.view(B, output_size, output_size, self.dim)
+        compressed_fields = compressed_fields.permute(0, 3, 1, 2)
 
-        for block in self.blocks:
-            x = block(x)
+        output = self.upsample(compressed_fields)
 
-        x = self.norm(x)
+        return output
 
-        cls_token_final = x[:, 0] # just the CLS token
-        x = self.head(cls_token_final)
 
-        return x
+
+model = VisionTransformer(img_size=256, patch_size=16, dim=768, depth=12, heads=12, mlp_dim=3072)
+test_input = torch.randn((1, 2, 256, 256))
+pred = model(test_input)
+print(pred.shape)
+
