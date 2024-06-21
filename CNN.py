@@ -1,9 +1,44 @@
+import torch
 import torch.nn as nn
+
+
+# class ConvolutionBlock(nn.Module):
+#     """Encapsulates the Conv2D > BatchNorm > ReLU pipeline.
+
+#     Parameters
+#     ----------
+#     in_channels : int
+#         Number of input channels.
+#     out_channels : int
+#         Number of output channels.
+#     kernel_size : int
+#         Filter size.
+#     padding : int
+#         Number of pixels added around the border.
+#     """
+
+#     def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
+#         super(ConvolutionBlock, self).__init__()
+
+#         # Components needed in a convolution layer
+#         self.conv2d = nn.Conv2d(
+#             in_channels,
+#             out_channels,
+#             kernel_size,
+#             stride,
+#             padding,
+#             padding_mode="circular",
+#         )
+#         self.batchnorm2d = nn.BatchNorm2d(out_channels)
+#         self.relu = nn.ReLU()
+
+#     def forward(self, x):
+#         return self.relu(self.batchnorm2d(self.conv2d(x)))
 
 
 class CNN(nn.Module):
 
-    def __init__(self, name, kernel):
+    def __init__(self, name : str, kernel : int):
         """Initialize components used to build the CNN model.
 
         Parameters
@@ -48,9 +83,9 @@ class CNN(nn.Module):
         ]
         self.layers = nn.ModuleList(layers)
 
-    def forward(self, x):
+    def forward(self, x : torch.Tensor):
         """Calculate a forward pass.
-    
+
         Parameters
         ----------
         x : torch.Tensor

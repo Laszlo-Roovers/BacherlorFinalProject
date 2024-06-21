@@ -1,101 +1,43 @@
-import h5py
 import os
 import numpy as np
 import torch
 import random
 
 
-def prepare_data(DATABASE_PATH, name, split_ratio):
-    """Takes a database in HDF5 format and turns in into a normalized train & test set.
-    The result is stored locally in ./data/sets/.
+def odd_to_even_2D(f_hat):
+    # go from N to N-1 points in fourier space
+    assert f_hat.shape[0] % 2 == 1
+    assert f_hat.shape[0] == f_hat.shape[1]
+    N = f_hat.shape[0]
+    neqy = N // 2
+    f_hat_even = (np.concatenate((f_hat[: neqy + 1, :], f_hat[neqy + 2 :, :]), axis=0) * (N - 1) / N)
+    f_hat_even = (np.concatenate((f_hat_even[:, : neqy + 1], f_hat_even[:, neqy + 2 :]), axis=1) * (N - 1) / N)
+    f_hat_even[neqy, :] = 0
+    f_hat_even[:, neqy] = 0
 
-    Parameters
-    ----------
-    DATABASE_PATH : str
-        Path of the HDF5 database file.
-    name : str
-        Reference name with which the resulting datasets should be stored.
-    split_ratio : float
-        Determines the train-test split.
-    """
-
-    # Read HDF5 database into NumPy arrays
-    with h5py.File(DATABASE_PATH, "r") as f:
-        w_hat = f["w_hat_n_HF"]
-        psi_hat = f["psi_hat_n_HF"]
-        w = np.fft.ifft2(w_hat).real
-        psi = np.fft.ifft2(psi_hat).real
-
-    # Resize to 256x256 for compatibility
-    w = w[:, :-1, :-1]
-    psi = psi[:, :-1, :-1]
-
-    # Split the array of field snapshots up into a training set and a test set
-    split_index = round(split_ratio * len(w))
-
-    w_train, w_test = w[:split_index, :, :], w[split_index:, :, :]
-    psi_train, psi_test = psi[:split_index, :, :], psi[split_index:, :, :]
-
-    # Apply normalization to improve numerical stability
-    w_train, w_test, psi_train, psi_test = normalize_fields(
-        w_train, w_test, psi_train, psi_test
-    )
-
-    # Create directory to store results using provided name
-    result_path = f"./data/sets/{name}"
-    if not os.path.isdir(result_path):
-        os.makedirs(result_path)
-
-    # Save the fully prepared datasets
-    np.save(f"{result_path}/wtrain", w_train)
-    np.save(f"{result_path}/wtest", w_test)
-    np.save(f"{result_path}/psitrain", psi_train)
-    np.save(f"{result_path}/psitest", psi_test)
+    return f_hat_even
 
 
-def normalize_fields(w_train, w_test, psi_train, psi_test):
-    """Normalize all the fields in the arrays of field snapshots using training set.
-    Only summary statistics of the training set are used because the test set should be
-    considered as an unknown, that the model does not have access to during training.
+def get_stats(x : np.array):
 
-    Parameters
-    ----------
-    w_train : torch.Tensor
-        Train set of unnormalized vorticity.
-    w_test : torch.Tensor
-        Test set of unnormalized vorticity.
-    psi_train : torch.Tensor
-        Train set of unnormalized stream function.
-    psi_test : torch.Tensor
-        Test set of unnormalized stream function.
+    stats = {
+        'mean': np.mean(x),
+        'std': np.std(x)
+    }
 
-    Returns
-    -------
-    w_train :torch.Tensor
-        Train set of normalized vorticity.
-    w_test : torch.Tensor
-        Test set of normalized vorticity.
-    psi_train : torch.Tensor
-        Train set of normalized stream function.
-    psi_test : torch.Tensor
-        Test set of normalized stream function.
-    """
-    # Compute relevant statistics of the training data set
-    w_train_mean, w_train_std = np.mean(w_train), np.std(w_train)
-    psi_train_mean, psi_train_std = np.mean(psi_train), np.std(psi_train)
-
-    # Apply normalization to both training and test data
-    #     but with the training stats only!!
-    w_train = (w_train - w_train_mean) / w_train_std
-    psi_train = (psi_train - psi_train_mean) / psi_train_std
-
-    w_test = (w_test - w_train_mean) / w_train_std
-    psi_test = (psi_test - psi_train_mean) / psi_train_std
-
-    return w_train, w_test, psi_train, psi_test
+    return stats
 
 
-def get_psi_from_w(w):
+def standardize_fields(field, stats, backward=False):
+
+    if backward:
+        return (field * stats['std'] + stats['mean'])
+    else:
+        return (field - stats['mean'])/stats['std']
+    
+
+
+def w_to_psi(w: np.array) -> np.array:
     """
     Compute the stream function from the vorticity.
 
@@ -106,28 +48,61 @@ def get_psi_from_w(w):
 
     Returns
     -------
-        psi: Stream function.
+        psi: torch.Tensor.
     """
-    # Grid size
-    N_HF = 256
+    # Compute Fourier transform of w
+    w_hat = np.fft.fft2(w)
 
-    # Conversion from spatial domain to frequency domain
-    w_hat = torch.fft.fft2(w)
+    # Compute wave numbers
+    Nx, Ny = w.shape
+    kx = np.fft.fftfreq(Nx).reshape(-1, 1) * Nx
+    ky = np.fft.fftfreq(Ny).reshape(1, -1) * Ny
 
-    # Kernel defintion (TODO: check if description correct)
-    kx = 1j * torch.fft.fftfreq(N_HF).reshape(-1, 1) * N_HF
-    ky = 1j * torch.fft.fftfreq(N_HF).reshape(1, -1) * N_HF
+    # Compute Laplacian in Fourier space (prevent division by zero)
     k_squared = kx**2 + ky**2
     k_squared[0, 0] = 1.0
-    k_squared = k_squared.to(w_hat.device)
-    # Computation of stream function in frequency domain
-    psi_hat = w_hat / k_squared
+
+    # Compute stream function in Fourier space
+    psi_hat = -w_hat / k_squared
     psi_hat[0, 0] = 0.0
 
-    # Conversion from frequency domain back to spatial domain
-    psi = torch.fft.ifft2(psi_hat).real
+    # Conversion from Fourier space to spatial domain
+    psi = np.fft.ifft2(psi_hat).real
 
     return psi
+
+
+def psi_to_w(psi: np.array) -> np.array:
+    """
+    Compute the vorticity from the stream function.
+
+    Parameters
+    ----------
+    psi : torch.Tensor
+        Stream function.
+
+    Returns
+    -------
+        psi: torch.Tensor.
+    """
+    # Compute Fourier transform of psi
+    psi_hat = np.fft.fft2(psi)
+
+    # Compute wave numbers
+    Nx, Ny = psi.shape
+    kx = np.fft.fftfreq(Nx).reshape(-1, 1) * Nx
+    ky = np.fft.fftfreq(Ny).reshape(1, -1) * Ny
+
+    # Compute Laplacian is Fourier space
+    k_squared = kx**2 + ky**2
+
+    # Compute vorticity in Fourier space
+    w_hat = -k_squared * psi_hat
+
+    # Conversion from Fourier space to spatial domain
+    w = np.fft.ifft2(w_hat).real
+
+    return w
 
 
 def save_model(model, model_path, name):
